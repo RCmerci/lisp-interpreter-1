@@ -1,0 +1,6 @@
+*.cm*
+*.txt
+parser.ml
+lexer.ml
+parser.mli
+*.*~

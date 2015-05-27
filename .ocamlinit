@@ -1,0 +1,13 @@
+
+#load "type.cmo";;
+#load "lexer.cmo";;
+#load "parser.cmo";;
+#load "util.cmo";;
+#load "error.cmo";;
+#load "env.cmo";;
+#load "eval.cmo";;
+#load "builtin.cmo";;
+#load "init.cmo";;
+open Type;;
+open Init;;
+open Builtin;;
