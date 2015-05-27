@@ -52,6 +52,17 @@ let cdr (arg: value list) : value =
     | Vwarp (DotSlist (_ :: tl, s)) -> Vwarp (DotSlist (tl, s))
     | _ -> raise (Error.wrong_type_arg_error "cdr")
 
+let cons (arg : value list) : value =
+  match arg with
+  | [Vwarp car_; Vwarp((Number _)as x) ]
+  | [Vwarp car_; Vwarp((String _)as x) ]
+  | [Vwarp car_; Vwarp((Bool _)  as x) ] 
+  | [Vwarp car_; Vwarp((Symbol _)as x) ] -> Vwarp (DotSlist ([car_], x))
+  | [Vwarp car_; Vwarp (Slist x)] -> Vwarp (Slist (car_ :: x))
+  | [Vwarp car_; Vwarp (DotSlist (sl, s))] -> Vwarp (DotSlist (car_::sl, s))
+  | _ -> raise (Error.wrong_number_of_arguments "cons")
+	       
+		 
 let add (arg : value list) : value =
   let args' = arg |> List.map (function 
 				| Vwarp Number (n:int) ->  n
@@ -149,13 +160,32 @@ let set (arg : value list) (env:environ) : value =
     match name with
     | Vwarp (Symbol name') -> Env.set_var name' value env; value
     | _ -> raise (Error.wrong_type_arg_error "set")
-	  
+
+let _let (arg : sexp list) (env:environ) : value =
+  let env' = Env.new_env env in
+  let rec bind_aux bindl =
+      match bindl with
+      | [] -> nil
+      | (Slist [(Symbol _) as sym1; v]) :: tl ->
+	   let _ = set [(Vwarp sym1); Eval.eval v env'] env' in
+	   bind_aux tl
+      | _ -> raise (Error.wrong_type_arg_error "let")
+  in
+  match arg with
+  | (Slist bindl) :: tl_body -> (
+    let _ = bind_aux bindl in
+    Eval.eval_sexp_list tl_body env')
+  | [] -> raise (Error.wrong_number_of_arguments "let")
+  | _ -> raise (Failure ("impossible : builtin :" ^ (string_of_int __LINE__)))
+
+	       
 ;;
 let load_builtin () =   
   let () = aux_set "defun" (Vmacro (SpecialM defun)) in
   let () = aux_set "defmacro" (Vmacro (SpecialM defmacro)) in
   let () = aux_set "car" (Vfunc (BuiltInF car)) in
   let () = aux_set "cdr" (Vfunc (BuiltInF cdr)) in
+  let () = aux_set "cons" (Vfunc (BuiltInF cons)) in
   let () = aux_set "+" (Vfunc (BuiltInF add)) in
   let () = aux_set "-" (Vfunc (BuiltInF sub)) in
   let () = aux_set "*" (Vfunc (BuiltInF mul)) in
@@ -165,6 +195,7 @@ let load_builtin () =
   let () = aux_set "list" (Vfunc (BuiltInF list)) in
   let () = aux_set "quasiquote" (Vmacro (BuiltInM quasiquote)) in
   let () = aux_set "set" (Vfunc (SpecialF set)) in
+  let () = aux_set "let" (Vmacro (NoOutEvalM _let)) in
   ()
 
   
