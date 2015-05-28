@@ -21,7 +21,8 @@ let rec eval (exp:sexp) (env:environ) : value =
 	  | Vmacro macro ->  macro_call macro tl env
 	  | Vwarp s -> raise (Error.unbound_func (Util.sprint_sexp s))
      end
-  |DotSlist (sexp_lst, sexp) -> raise (Error.no_dotlist_eval sexp)
+  | DotSlist (sexp_lst, sexp) -> raise (Error.no_dotlist_eval sexp)
+  | Swarp f -> Vfunc f
 
 
 and func_call (func : func) (args : value list) (env:environ): value =
@@ -54,8 +55,9 @@ let rec eval_sexp_list (exps: sexp list) (env: environ) : value =
   end
 
 let define_func  ?(tp="userdef") (func_name:string) (args:string list) (body: sexp list) (env:environ) : func =
-  let env' = Env.new_env env in
-  let aux_func args' = 
+  (* let env' = Env.new_env env in *)
+  let aux_func args' =
+    let env' = Env.new_env env in
     if (List.length args') <> (List.length args)
     then raise (Error.wrong_number_of_arguments func_name)
     else
@@ -84,6 +86,7 @@ let define_macro ?(tp="userdef") (macro_name:string) (args:string list) (body:se
       let () = List.iter2 aux_set_var args (List.map (fun a -> Vwarp a) args') in
       match eval_sexp_list body env' with
       | Vwarp s -> s
+      | Vfunc f -> Swarp f
       | _ -> raise Error.unwarp_value_error
   in
   if tp = "userdef" then UserDefM _macro

@@ -7,6 +7,7 @@ type sexp =
   | Symbol of string
   | Slist of sexp list
   | DotSlist of sexp list * sexp
+  | Swarp of func
 			 
  and value =
    | Vfunc   of func

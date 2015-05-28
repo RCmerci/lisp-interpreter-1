@@ -1,32 +1,41 @@
-
-
+CC = ocamlc
+CC1 = ocamlc
+CC2 = ocamlopt
+SET1 = parser.cmo lexer.cmo type.cmo util.cmo error.cmo env.cmo eval.cmo stdlib.cmo builtin.cmo  init.cmo
+SET2 = parser.cmx lexer.cmx type.cmx util.cmx error.cmx env.cmx eval.cmx stdlib.cmx builtin.cmx  init.cmx
 
 all : lexer parser type util error eval env builtin init
+	$(CC1) -o lisp $(SET1)
 	@echo "done"
 
+native : lexer parser type util error eval env builtin init 
+	$(CC2) -o lisp $(SET2)
+	@echo "done"
 
 eval : eval.ml type env
-	ocamlc -c eval.ml
-env : env.ml util
-	ocamlc -c env.ml
+	$(CC) -c eval.ml
+env : env.ml util error
+	$(CC) -c env.ml
 
 parser:parser.ml parser.mli type
-	ocamlc -c parser.mli
-	ocamlc -c parser.ml
+	$(CC) -c parser.mli
+	$(CC) -c parser.ml
 
 lexer: lexer.ml parser
-	ocamlc -c lexer.ml
+	$(CC) -c lexer.ml
 
 type: type.ml 
-	ocamlc -c type.ml
+	$(CC) -c type.ml
 util: util.ml type 
-	ocamlc -c util.ml
+	$(CC) -c util.ml
 error: error.ml util
-	ocamlc -c error.ml
+	$(CC) -c error.ml
 builtin : builtin.ml type util env 
-	ocamlc -c builtin.ml
-init : init.ml type util builtin error
-	ocamlc -c init.ml
+	$(CC) -c builtin.ml
+init : init.ml type util builtin error stdlib
+	$(CC) -c init.ml
+stdlib: stdlib.ml eval parser lexer
+	$(CC) -c stdlib.ml
 # ---------------------------------------
 
 lexer.ml: lexer.mll 
@@ -39,5 +48,5 @@ parser.mli: parser.mly
 
 
 clean :
-	rm *.cm*
-	rm lexer.ml parser.ml parser.mli
+	rm *.cm* *.o
+	rm lexer.ml parser.ml parser.mli lisp

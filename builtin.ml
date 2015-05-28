@@ -5,9 +5,22 @@ let top_env = {
     fmmap =Util.StrMap.empty;
     upper_env=None;
   };;
-
+(* utils *)
 let aux_set (name:string) (value:value) = Env.set_fm name value top_env
-
+let nil2false a =
+  match a with
+  | Vwarp (Slist []) -> Vwarp (Bool false)
+  | _ -> a
+let bool2value b = Vwarp (Bool b)
+let value2bool v =
+  match v with
+  | Vwarp (Bool b) -> b
+  | _ -> raise (Failure ("impossible"^(string_of_int __LINE__)))
+let unwarp_Vfunc v =
+  match v with
+  | Vfunc f -> f
+  | _ -> raise (Error.wrong_type_arg_error "unwarp_Vfunc")
+(* utils *)
 
 let defun (args:sexp list) (env:environ) : sexp =
   let func_name = List.hd args |> Util.sym2str in
@@ -21,6 +34,14 @@ let defun (args:sexp list) (env:environ) : sexp =
   |> Env.set_fm ~env:env func_name;
   Slist []
 
+let lambda (arg : sexp list) (env:environ) : value =
+  let args' = List.hd arg in
+  let body = List.tl arg in
+  Vfunc (Eval.define_func
+	   "_lAmDBdA_"
+	   (Util.slist2string_list args')
+	   body
+	   env)
 
 let defmacro (args:sexp list) (env:environ) : sexp =
   let macro_name = List.hd args |> Util.sym2str in
@@ -123,6 +144,7 @@ let list (arg : value list) : value =
   if 0 = List.length arg then nil else
     Vwarp (Slist (List.map
 		    (function Vwarp s -> s
+			    | Vfunc f -> Swarp f
 			    | _ -> raise (Failure ("impossible "^(string_of_int __LINE__ ))))
 			   arg))
       
@@ -146,6 +168,7 @@ let quasiquote (arg : sexp list) : sexp =
       | Slist [Symbol "unquote"; x] -> x
       | Slist _ as x -> Slist [Symbol "quote"; x]
       | Symbol _ as x -> Slist [Symbol "quote"; x]
+      | Swarp f -> raise (Failure ("impossible:builtin:"^(string_of_int __LINE__)))
     in
     let arg' = match (List.hd arg) with
       | Slist l -> l
@@ -177,11 +200,94 @@ let _let (arg : sexp list) (env:environ) : value =
     Eval.eval_sexp_list tl_body env')
   | [] -> raise (Error.wrong_number_of_arguments "let")
   | _ -> raise (Failure ("impossible : builtin :" ^ (string_of_int __LINE__)))
-
 	       
+let equal (arg : value list) : value =
+  if List.length arg <> 2 then raise (Error.wrong_number_of_arguments "equal") else
+  let rec aux arg = 
+    match arg with
+    | [Vwarp (Number n1); Vwarp (Number n2)] -> n1 = n2
+    | [Vwarp (String s1); Vwarp (String s2)] -> s1 = s2
+    | [Vwarp (Bool   b1); Vwarp (Bool   b2)] -> b1 = b2
+    | [Vwarp (Symbol s1); Vwarp (Symbol s2)] -> s1 = s2
+    | [Vwarp (Slist  l1); Vwarp (Slist l2)] ->
+       (try List.exists2 (fun a b -> aux [Vwarp a;Vwarp b] |> not) l1 l2 |> not with
+       | Invalid_argument "List.exists2" -> false)
+    | [Vwarp (DotSlist (l1, s1)); Vwarp (DotSlist (l2, s2))] ->
+       let rst =
+	 try List.exists2 (fun a b -> aux [Vwarp a;Vwarp b] |> not) l1 l2 with
+	 | Invalid_argument "List.exists2" -> true
+       in
+       if rst then not rst else
+	 aux [Vwarp s1;Vwarp s2]
+    | [Vwarp (Slist []); Vwarp (Bool false)] -> true
+    | [Vwarp (Bool false); Vwarp (Slist [])] -> true
+    | [Vfunc f1; Vfunc f2] -> raise (Error.wrong_type_arg_error "equal")
+    | _ -> false
+  in
+  aux arg |> bool2value
+	 
+let _if (arg :sexp list) (env: environ) : value =
+  if List.length arg < 2 then raise (Error.wrong_number_of_arguments "if") else
+    match arg with
+    | cond :: f_stat :: t_statl ->
+       let evalrst = Eval.eval cond env |> nil2false in
+       let eqrst =
+	 match equal [evalrst; Vwarp (Bool false)] with
+	 | Vwarp (Bool a) -> a
+	 | _ -> raise (Failure ("impossible"^(string_of_int __LINE__)))
+       in
+       if eqrst then
+	 Eval.eval_sexp_list t_statl env
+       else Eval.eval f_stat env
+    | _ -> raise (Failure ("impossible"^(string_of_int __LINE__)))
+
+let _lt (arg : value list) : value =
+  match List.length arg with
+  | 1 -> true |> bool2value
+  | 2 ->
+     (match arg with
+      | [Vwarp (Number n1); Vwarp (Number n2)] -> n1 < n2 |> bool2value
+      | _ -> raise (Error.wrong_type_arg_error "<"))
+  | _ -> raise (Error.wrong_number_of_arguments "<")
+		   
+let _le (arg: value list) : value =
+  match List.length arg with
+  | 1 -> true |> bool2value
+  | 2 -> 
+     (try if equal arg |> value2bool then bool2value true
+	  else _lt arg with
+      | Error.Wrong_type_arg _ -> raise (Error.wrong_type_arg_error "<="))
+  | _ -> raise (Error.wrong_number_of_arguments "<=")
+
+let _gt (arg : value list) : value =
+  match List.length arg with
+  | 1 -> true |> bool2value
+  | 2 -> (try _le arg |> value2bool |> not |> bool2value with
+	  | Error.Wrong_type_arg _ -> raise (Error.wrong_type_arg_error ">"))
+  | _ -> raise (Error.wrong_number_of_arguments ">")
+let _ge (arg : value list) : value =
+  match List.length arg with
+  | 1 -> true |> bool2value
+  | 2 -> (try (if equal arg |> value2bool then true |> bool2value
+	      else _gt arg) with
+	 | Error.Wrong_type_arg _ -> raise (Error.wrong_type_arg_error ">="))
+  | _ -> raise (Error.wrong_number_of_arguments ">=")
+
+let funcall (arg : value list) (env:environ) : value =
+  match List.length arg with
+  | 0 ->  raise (Error.wrong_number_of_arguments "funcall") 
+  | _ ->
+     Eval.func_call
+       (try List.hd arg |> unwarp_Vfunc  with
+	| Error.Wrong_type_arg _ -> raise (Error.wrong_type_arg_error "funcall"))
+       (List.tl arg)
+       env
+
+  
 ;;
 let load_builtin () =   
   let () = aux_set "defun" (Vmacro (SpecialM defun)) in
+  let () = aux_set "lambda" (Vmacro (NoOutEvalM lambda)) in
   let () = aux_set "defmacro" (Vmacro (SpecialM defmacro)) in
   let () = aux_set "car" (Vfunc (BuiltInF car)) in
   let () = aux_set "cdr" (Vfunc (BuiltInF cdr)) in
@@ -196,6 +302,13 @@ let load_builtin () =
   let () = aux_set "quasiquote" (Vmacro (BuiltInM quasiquote)) in
   let () = aux_set "set" (Vfunc (SpecialF set)) in
   let () = aux_set "let" (Vmacro (NoOutEvalM _let)) in
+  let () = aux_set "equal" (Vfunc (BuiltInF equal)) in
+  let () = aux_set "if" (Vmacro (NoOutEvalM _if)) in
+  let () = aux_set "<" (Vfunc (BuiltInF _lt)) in
+  let () = aux_set "<=" (Vfunc (BuiltInF _le)) in
+  let () = aux_set ">" (Vfunc (BuiltInF _gt)) in
+  let () = aux_set ">=" (Vfunc (BuiltInF _ge)) in
+  let () = aux_set "funcall" (Vfunc (SpecialF funcall)) in
   ()
 
   

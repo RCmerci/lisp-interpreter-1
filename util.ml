@@ -32,6 +32,7 @@ let rec print_sexp (to_buffer: Buffer.t) (sexp: sexp) =
        print_sexp to_buffer v;
        bprintf to_buffer ")";
      end
+  | Swarp _ -> bprintf to_buffer " #Function "
 
 let sprint_sexp s =
   let b = Buffer.create 1 in
@@ -41,7 +42,8 @@ let sprint_sexp s =
 let sprint_value v =
   (match v with
    | Vwarp s -> sprint_sexp s
-   | _ -> "-") ^ "\n"
+   | Vfunc _ -> " #Function "
+   | Vmacro _ ->  " #Macro ") ^ "\n"
   
 let sym2str (arg: sexp) : string =
   match arg with

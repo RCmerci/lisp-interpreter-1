@@ -5,7 +5,7 @@ open Error
     
 let main () =
   let () = Builtin.load_builtin () in
-  (* let () =Stdlib.load_stdlib () in *)
+  let () = Stdlib.load_stdlib Builtin.top_env |> ignore in
   (* let in_chan = Scanning.stdin in *)
   let aux_f sexp =
     print_bytes (sexp^"\n");
@@ -39,3 +39,5 @@ let main () =
   print_bytes ">";
   loop ()
   
+;;
+  main ()
